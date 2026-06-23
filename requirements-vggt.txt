@@ -1,0 +1,13 @@
+torch
+torchvision
+numpy<2
+Pillow
+huggingface_hub
+einops
+safetensors
+opencv-python
+scipy
+tqdm
+matplotlib
+gsplat
+git+https://github.com/facebookresearch/vggt.git
