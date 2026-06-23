@@ -1,0 +1,30 @@
+diff --git a/train.py b/train.py
+--- a/train.py
++++ b/train.py
+@@
+-        if viewpoint_cam.alpha_mask is not None:
+-            alpha_mask = viewpoint_cam.alpha_mask.cuda()
+-            image *= alpha_mask
+-
+         # Loss
+         gt_image = viewpoint_cam.original_image.cuda()
+-        Ll1 = l1_loss(image, gt_image)
++        background_loss = 0.0
++        if viewpoint_cam.alpha_mask is not None:
++            alpha_mask = viewpoint_cam.alpha_mask.cuda()
++            image_for_loss = image * alpha_mask
++            gt_image = gt_image * alpha_mask
++            background_loss = (image * (1.0 - alpha_mask)).abs().mean()
++        else:
++            image_for_loss = image
++
++        Ll1 = l1_loss(image_for_loss, gt_image)
+         if FUSED_SSIM_AVAILABLE:
+-            ssim_value = fused_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
++            ssim_value = fused_ssim(image_for_loss.unsqueeze(0), gt_image.unsqueeze(0))
+         else:
+-            ssim_value = ssim(image, gt_image)
++            ssim_value = ssim(image_for_loss, gt_image)
+ 
+         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_value)
++        loss = loss + 0.2 * background_loss
