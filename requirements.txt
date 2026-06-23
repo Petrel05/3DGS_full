@@ -1,0 +1,8 @@
+numpy>=1.24
+opencv-python>=4.8
+scipy>=1.10
+
+# Optional accelerators / reference implementations used by the README:
+# torch>=2.1
+# vggt
+# gsplat
