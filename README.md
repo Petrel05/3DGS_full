@@ -20,10 +20,7 @@
 
 补充的 VGGT confidence filtering、视频帧数选择、BA+gsplat 验证和输入预处理消融实验见 `REPORT.md`。
 
-项目根目录的两个压缩包是给 SIBR 机器使用的数据包：
-
-- `official_3dgs_sibr_data.tar.gz`：人体两组最终输出及对应 COLMAP 输入。
-- `official_3dgs_sibr_data_cropped_scene.tar.gz`：包含裁剪后的场景最终输出及对应 COLMAP 输入。
+最终 Graphdeco 输出、COLMAP 输入、WebGL 预览和 render/GT 拼图不随 Git 提交。读者可按“复现最终方法”中的命令，从原始数据和 VGGT 权重重新生成这些 `outputs/official_*` 目录。SIBR viewer 运行时只需要对应的 Graphdeco 模型目录和 COLMAP 输入目录。
 
 `SIBR/` 目录保存 Windows viewer 运行包和环境说明，具体见 `SIBR/README.md`。
 
@@ -81,6 +78,16 @@ CUDA_VISIBLE_DEVICES=1 conda run -n vggt python run_project.py \
   --export-colmap-dataset outputs/official_data2_colmap_50k \
   --outlier-percentile 100
 ```
+
+数据1使用同一条命令，只需要把路径替换为：
+
+```bash
+--source 大作业数据/数据1-人体
+--output outputs/official_data1_export_tmp
+--export-colmap-dataset outputs/official_data1_colmap_50k
+```
+
+后续 clean RGBA、官方 Graphdeco 训练、render/GT 拼图和 WebGL 辅助预览步骤中，同样把 `official_data2_*` 替换为 `official_data1_*`。
 
 场景使用 128 帧视频抽帧：
 
