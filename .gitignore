@@ -22,3 +22,11 @@ __pycache__/
 # Temporary files
 tmp/
 *.log
+
+# Large local archives
+*.tar.gz
+*.safetensors
+
+# Downloadable viewer binaries
+SIBR/
+  viewer/bin/

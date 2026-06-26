@@ -179,7 +179,7 @@ VGGT 输出 `world_points_conf`，可用置信度过滤低质量点。对数据1
 
 ## 8. SIBR 展示方式
 
-远程训练服务器没有桌面环境，无法运行实时 SIBR viewer。将最终模型目录和对应 COLMAP 输入移动到 Windows SIBR 机器后，可以运行：
+远程训练服务器没有桌面环境，无法运行实时 SIBR viewer；当前 Linux 本机也不能直接运行 `SIBR/viewer/bin/SIBR_gaussianViewer_app.exe`。将最终模型目录和对应 COLMAP 输入移动到 Windows SIBR 机器后，可以运行：
 
 ```bash
 python scripts/run_sibr_viewer.py data1 \

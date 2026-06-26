@@ -9,5 +9,6 @@ opencv-python
 scipy
 tqdm
 matplotlib
+plyfile
 gsplat
 git+https://github.com/facebookresearch/vggt.git

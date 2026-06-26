@@ -1,8 +1,12 @@
 numpy>=1.24
 opencv-python>=4.8
+Pillow>=10
 scipy>=1.10
+tqdm>=4.66
+matplotlib>=3.7
+plyfile>=1.0
 
-# Optional accelerators / reference implementations used by the README:
+# Optional for the internal gsplat/VGGT chain:
 # torch>=2.1
-# vggt
+# torchvision
 # gsplat
