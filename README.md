@@ -3,22 +3,24 @@
 本项目完成从无标定多视角图像/视频到 3D Gaussian Splatting 的重建流程。当前最终采用的方法是：
 
 1. 使用 VGGT 估计相机参数和初始点云。
-2. 将 VGGT 结果导出为 COLMAP text 数据集，作为官方 Graphdeco 3DGS 的输入。
-3. 对人体数据使用前景 mask、去绿幕溢色和 alpha 背景约束；对场景视频裁掉 VGGT 方图 padding 产生的上下白边。
-4. 使用官方 Graphdeco 3DGS 训练 30k iterations。
-5. 使用官方 SIBR viewer 展示最终高斯结果。由于高斯训练资源要求高，训练在远程服务器完成；但远程服务器没有桌面环境，无法进行实时可视化，因此 SIBR 部分在另一台 Windows 机器上完成，相关代码和运行环境需求会随项目一起提交。
+2. 在 VGGT 相机初始化下构建 SIFT sparse tracks，并用 Bundle Adjustment 优化相机外参和稀疏三维点。
+3. 将 BA 后结果导出为 COLMAP text 数据集，作为官方 Graphdeco 3DGS 的输入。
+4. 对人体数据使用前景 mask、去绿幕溢色和 alpha 背景约束；对场景视频裁掉 VGGT 方图 padding 产生的上下白边。
+5. 使用官方 Graphdeco 3DGS 训练 30k iterations。
+6. 使用官方 SIBR viewer 展示最终高斯结果。由于高斯训练资源要求高，训练在远程服务器完成；但远程服务器没有桌面环境，无法进行实时可视化，因此 SIBR 部分在另一台 Windows 机器上完成，相关代码和运行环境需求会随项目一起提交。
 
 ## 最终采用结果
 
-| 数据 | 最终 Graphdeco 输出 | 训练输入 | 高斯数 | 辅助 WebGL 预览 |
+| 数据 | 最终 Graphdeco 输出 | 训练输入 | 高斯数 | 说明 |
 | --- | --- | --- | ---: | --- |
-| 数据1-人体 | `outputs/official_data1_graphdeco_30k_masked_clean_bg` | `outputs/official_data1_colmap_50k_masked_clean` | 63,048 | `outputs/official_data1_graphdeco_30k_masked_clean_bg_viewer/viewer.html` |
-| 数据2-人体 | `outputs/official_data2_graphdeco_30k_masked_clean_bg` | `outputs/official_data2_colmap_50k_masked_clean` | 63,339 | `outputs/official_data2_graphdeco_30k_masked_clean_bg_viewer/viewer.html` |
-| 数据3-场景 | `outputs/official_scene128_graphdeco_30k_cropped` | `outputs/official_scene128_colmap_50k_cropped` | 988,158 | `outputs/official_scene128_graphdeco_30k_cropped_viewer/viewer.html` |
+| 数据1-人体 + BA | `outputs/official_data1_graphdeco_30k_masked_clean_bg_ba` | `outputs/official_data1_colmap_50k_masked_clean_ba` | 39,531 | 新版 BA 主流程 |
+| 数据2-人体 + BA | `outputs/official_data2_graphdeco_30k_masked_clean_bg_ba` | `outputs/official_data2_colmap_50k_masked_clean_ba` | 62,854 | 新版 BA 主流程 |
+| 数据3-场景 48帧 + BA | `outputs/official_scene48_graphdeco_30k_cropped_ba` | `outputs/official_scene48_colmap_50k_cropped_ba` | 919,502 | 新版 BA 主流程，已完成 |
+| 数据3-场景 128帧 no-BA | `outputs/official_scene128_graphdeco_30k_cropped` | `outputs/official_scene128_colmap_50k_cropped` | 988,158 | 高视角 baseline |
 
 最终质量判断以官方 Graphdeco 训练输出、官方 `render.py`、以及 SIBR viewer 视频为准。项目内 WebGL viewer 只用于快速检查点云分布，它不等价于官方 SIBR viewer 的 SH 渲染。
 
-补充的 VGGT confidence filtering、视频帧数选择、BA+gsplat 验证和输入预处理消融实验见 `REPORT.md`。
+补充的 VGGT confidence filtering、视频帧数选择、no-BA/with-BA 对比、BA+gsplat 轻量验证和输入预处理消融实验见 `REPORT.md`。
 
 最终 Graphdeco 输出、COLMAP 输入、WebGL 预览和 render/GT 拼图不随 Git 提交。读者可按“复现最终方法”中的命令，从原始数据和 VGGT 权重重新生成这些 `outputs/official_*` 目录。SIBR viewer 运行时只需要对应的 Graphdeco 模型目录和 COLMAP 输入目录。
 
@@ -28,11 +30,11 @@
 
 | 作业要求 | 项目实现 |
 | --- | --- |
-| 使用 VGGT 求相机参数和初始点云 | `src/reconstruct3d/vggt_adapter.py` 调用 VGGT，读取 `pose_enc`、`world_points`、`world_points_conf`。 |
-| 编程实现 BA 优化相机外参和点云 | `src/reconstruct3d/ba.py` 使用 SIFT tracks 和 `scipy.optimize.least_squares` 联合优化相机外参与三维点。 |
-| 编程实现/调用 3DGS 并实时交互渲染 | `src/reconstruct3d/gaussian.py` 保留 `gsplat` 实现链路；最终展示采用官方 Graphdeco 3DGS + SIBR viewer。 |
+| 使用 VGGT 求相机参数和初始点云 | `src/reconstruct3d/vggt_adapter.py` 调用 VGGT，读取 `pose_enc`、`world_points`、`world_points_conf`，作为 BA 与 3DGS 初始化。 |
+| 编程实现 BA 优化相机外参和点云 | `src/reconstruct3d/ba.py` 使用 SIFT tracks 和 `scipy.optimize.least_squares` 联合优化相机外参与三维点，并导出 BA 后 COLMAP 数据。 |
+| 编程实现/调用 3DGS 并实时交互渲染 | 新版主流程使用 BA 后 COLMAP 数据训练官方 Graphdeco 3DGS 30k；`src/reconstruct3d/gaussian.py` 保留 `gsplat` 轻量验证链路；最终用 SIBR viewer 展示。 |
 
-旧的 VGGT dense viewer、BA+gsplat 验证链路仍保留在代码中，主要用于说明编程实现和对比验证；最终叙事以三组 official Graphdeco 30k 结果为主。
+VGGT dense viewer 和 BA+gsplat 轻量验证链路仍保留在代码中，主要用于说明编程实现和对比验证；最终叙事以 BA 后 COLMAP 接入官方 Graphdeco 30k 的结果为主。
 
 ## 环境
 
@@ -58,24 +60,25 @@ Python 依赖见：
 
 ### 1. 导出 COLMAP text 数据
 
-以数据2为例：
+以数据2新版 BA 主流程为例：
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 conda run -n vggt python run_project.py \
   --backend vggt \
   --vggt-model .models/VGGT-1B \
   --source 大作业数据/数据2-人体 \
-  --output outputs/official_data2_export_tmp \
+  --output outputs/official_data2_vggt_ba_export_tmp \
   --max-images 0 \
-  --skip-vggt-sparse \
-  --ba-backend none \
+  --ba-backend scipy \
+  --ba-points 120 \
+  --vggt-sparse-match-window 1 \
   --vggt-confidence-percentile 25 \
   --vggt-max-points 50000 \
   --gaussian-source vggt \
   --dense-camera-filter mask \
   --gaussian-backend knn \
   --gaussian-max-points 1000 \
-  --export-colmap-dataset outputs/official_data2_colmap_50k \
+  --export-colmap-dataset outputs/official_data2_colmap_50k_ba \
   --outlier-percentile 100
 ```
 
@@ -83,31 +86,32 @@ CUDA_VISIBLE_DEVICES=1 conda run -n vggt python run_project.py \
 
 ```bash
 --source 大作业数据/数据1-人体
---output outputs/official_data1_export_tmp
---export-colmap-dataset outputs/official_data1_colmap_50k
+--output outputs/official_data1_vggt_ba_export_tmp
+--export-colmap-dataset outputs/official_data1_colmap_50k_ba
 ```
 
 后续 clean RGBA、官方 Graphdeco 训练、render/GT 拼图和 WebGL 辅助预览步骤中，同样把 `official_data2_*` 替换为 `official_data1_*`。
 
-场景使用 128 帧视频抽帧：
+场景已完成的 BA 主流程使用 48 帧视频抽帧；128 帧 no-BA 结果保留为高视角 baseline：
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 conda run -n vggt python run_project.py \
   --backend vggt \
   --vggt-model .models/VGGT-1B \
   --source 大作业数据/数据3-场景.mp4 \
-  --output outputs/official_scene128_export_tmp \
-  --max-images 128 \
-  --skip-vggt-sparse \
-  --ba-backend none \
+  --output outputs/official_scene48_vggt_ba_export_tmp \
+  --max-images 48 \
   --no-masks \
+  --ba-backend scipy \
+  --ba-points 60 \
+  --vggt-sparse-match-window 1 \
   --vggt-confidence-percentile 25 \
   --vggt-max-points 50000 \
   --gaussian-source vggt \
   --dense-camera-filter visible \
   --gaussian-backend knn \
   --gaussian-max-points 1000 \
-  --export-colmap-dataset outputs/official_scene128_colmap_50k \
+  --export-colmap-dataset outputs/official_scene48_colmap_50k_ba \
   --outlier-percentile 100
 ```
 
@@ -115,18 +119,18 @@ CUDA_VISIBLE_DEVICES=1 conda run -n vggt python run_project.py \
 
 ```bash
 conda run -n vggt python scripts/crop_colmap_letterbox.py \
-  --input outputs/official_scene128_colmap_50k \
-  --output outputs/official_scene128_colmap_50k_cropped
+  --input outputs/official_scene48_colmap_50k_ba \
+  --output outputs/official_scene48_colmap_50k_cropped_ba
 ```
 
 ### 2. 人体数据生成 clean RGBA
 
 ```bash
-rsync -a outputs/official_data2_colmap_50k/ outputs/official_data2_colmap_50k_masked_clean/
+rsync -a outputs/official_data2_colmap_50k_ba/ outputs/official_data2_colmap_50k_masked_clean_ba/
 
 conda run -n vggt python scripts/apply_alpha_masks_to_colmap_images.py \
   --source 大作业数据/数据2-人体 \
-  --dataset outputs/official_data2_colmap_50k_masked_clean \
+  --dataset outputs/official_data2_colmap_50k_masked_clean_ba \
   --max-size 518 \
   --erode 1 \
   --feather 2 \
@@ -142,8 +146,8 @@ conda run -n vggt python scripts/apply_alpha_masks_to_colmap_images.py \
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 conda run -n vggt python /tmp/gaussian-splatting-official/train.py \
-  -s /home/fhy/3DGS_full/outputs/official_data2_colmap_50k_masked_clean \
-  -m /home/fhy/3DGS_full/outputs/official_data2_graphdeco_30k_masked_clean_bg \
+  -s /home/fhy/3DGS_full/outputs/official_data2_colmap_50k_masked_clean_ba \
+  -m /home/fhy/3DGS_full/outputs/official_data2_graphdeco_30k_masked_clean_bg_ba \
   --iterations 30000 \
   --save_iterations 7000 15000 30000 \
   --test_iterations 7000 15000 30000 \
@@ -154,8 +158,8 @@ CUDA_VISIBLE_DEVICES=1 conda run -n vggt python /tmp/gaussian-splatting-official
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 conda run -n vggt python /tmp/gaussian-splatting-official/train.py \
-  -s /home/fhy/3DGS_full/outputs/official_scene128_colmap_50k_cropped \
-  -m /home/fhy/3DGS_full/outputs/official_scene128_graphdeco_30k_cropped \
+  -s /home/fhy/3DGS_full/outputs/official_scene48_colmap_50k_cropped_ba \
+  -m /home/fhy/3DGS_full/outputs/official_scene48_graphdeco_30k_cropped_ba \
   --iterations 30000 \
   --save_iterations 7000 15000 30000 \
   --test_iterations 7000 15000 30000 \
@@ -166,20 +170,20 @@ CUDA_VISIBLE_DEVICES=1 conda run -n vggt python /tmp/gaussian-splatting-official
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 conda run -n vggt python /tmp/gaussian-splatting-official/render.py \
-  -s /home/fhy/3DGS_full/outputs/official_data2_colmap_50k_masked_clean \
-  -m /home/fhy/3DGS_full/outputs/official_data2_graphdeco_30k_masked_clean_bg \
+  -s /home/fhy/3DGS_full/outputs/official_data2_colmap_50k_masked_clean_ba \
+  -m /home/fhy/3DGS_full/outputs/official_data2_graphdeco_30k_masked_clean_bg_ba \
   --iteration 30000 \
   --skip_test \
   --quiet
 
 conda run -n vggt python scripts/make_render_contact_sheet.py \
-  --render-dir outputs/official_data2_graphdeco_30k_masked_clean_bg/train/ours_30000/renders \
-  --gt-dir outputs/official_data2_graphdeco_30k_masked_clean_bg/train/ours_30000/gt \
-  --output outputs/official_data2_graphdeco_30k_masked_clean_bg/train/ours_30000/render_vs_gt_contact_sheet.png
+  --render-dir outputs/official_data2_graphdeco_30k_masked_clean_bg_ba/train/ours_30000/renders \
+  --gt-dir outputs/official_data2_graphdeco_30k_masked_clean_bg_ba/train/ours_30000/gt \
+  --output outputs/official_data2_graphdeco_30k_masked_clean_bg_ba/train/ours_30000/render_vs_gt_contact_sheet.png
 
 conda run -n vggt python scripts/convert_official_3dgs_to_viewer.py \
-  --input outputs/official_data2_graphdeco_30k_masked_clean_bg/point_cloud/iteration_30000/point_cloud.ply \
-  --output outputs/official_data2_graphdeco_30k_masked_clean_bg_viewer
+  --input outputs/official_data2_graphdeco_30k_masked_clean_bg_ba/point_cloud/iteration_30000/point_cloud.ply \
+  --output outputs/official_data2_graphdeco_30k_masked_clean_bg_ba_viewer
 ```
 
 ### 5. 在有 SIBR 的机器上运行 viewer
@@ -189,8 +193,8 @@ conda run -n vggt python scripts/convert_official_3dgs_to_viewer.py \
 ```bash
 python scripts/run_sibr_viewer.py data2 \
   --viewer-bin /path/to/SIBR_gaussianViewer_app \
-  --model /path/to/official_data2_graphdeco_30k_masked_clean_bg \
-  --source /path/to/official_data2_colmap_50k_masked_clean \
+  --model /path/to/official_data2_graphdeco_30k_masked_clean_bg_ba \
+  --source /path/to/official_data2_colmap_50k_masked_clean_ba \
   --iteration 30000
 ```
 
@@ -198,7 +202,7 @@ python scripts/run_sibr_viewer.py data2 \
 
 ```bash
 SIBR_VIEWER_BIN=/path/to/SIBR_gaussianViewer_app \
-python scripts/run_sibr_viewer.py scene128 --dry-run
+python scripts/run_sibr_viewer.py scene48 --dry-run
 ```
 
 `--dry-run` 会打印实际命令，便于检查 Windows SIBR 机器上的路径。注意：Graphdeco 输出目录里的 `cfg_args` 记录的是训练服务器上的绝对路径；跨机器运行时不要依赖其中的旧路径，应显式传入当前机器上的 `--model` 和 `--source`。

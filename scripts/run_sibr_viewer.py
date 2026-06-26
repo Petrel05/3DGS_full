@@ -11,12 +11,16 @@ BUNDLED_VIEWER_BIN = ROOT / "SIBR" / "viewer" / "bin" / "SIBR_gaussianViewer_app
 
 DATASETS = {
     "data1": {
-        "model": ROOT / "outputs" / "official_data1_graphdeco_30k_masked_clean_bg",
-        "source": ROOT / "outputs" / "official_data1_colmap_50k_masked_clean",
+        "model": ROOT / "outputs" / "official_data1_graphdeco_30k_masked_clean_bg_ba",
+        "source": ROOT / "outputs" / "official_data1_colmap_50k_masked_clean_ba",
     },
     "data2": {
-        "model": ROOT / "outputs" / "official_data2_graphdeco_30k_masked_clean_bg",
-        "source": ROOT / "outputs" / "official_data2_colmap_50k_masked_clean",
+        "model": ROOT / "outputs" / "official_data2_graphdeco_30k_masked_clean_bg_ba",
+        "source": ROOT / "outputs" / "official_data2_colmap_50k_masked_clean_ba",
+    },
+    "scene48": {
+        "model": ROOT / "outputs" / "official_scene48_graphdeco_30k_cropped_ba",
+        "source": ROOT / "outputs" / "official_scene48_colmap_50k_cropped_ba",
     },
     "scene128": {
         "model": ROOT / "outputs" / "official_scene128_graphdeco_30k_cropped",
