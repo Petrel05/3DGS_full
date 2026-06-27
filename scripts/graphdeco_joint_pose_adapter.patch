@@ -1,0 +1,153 @@
+diff --git a/arguments/__init__.py b/arguments/__init__.py
+--- a/arguments/__init__.py
++++ b/arguments/__init__.py
+@@
+         self.random_background = False
+         self.alpha_bg_weight = 0.2
++        self.joint_pose_opt = False
++        self.joint_pose_lr_rot = 0.00005
++        self.joint_pose_lr_trans = 0.0005
++        self.joint_pose_reg_weight = 0.01
++        self.joint_pose_start_iter = 300
++        self.joint_pose_stop_iter = 0
++        self.joint_pose_max_rot = 0.03
++        self.joint_pose_max_trans = 0.05
+         self.optimizer_type = "default"
+         super().__init__(parser, "Optimization Parameters")
+diff --git a/gaussian_renderer/__init__.py b/gaussian_renderer/__init__.py
+--- a/gaussian_renderer/__init__.py
++++ b/gaussian_renderer/__init__.py
+@@
+ from scene.gaussian_model import GaussianModel
+ from utils.sh_utils import eval_sh
++from utils.graphics_utils import geom_transform_points
+@@
+-    screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
++    base_means3D = pc.get_xyz
++    means3D = base_means3D
++    if hasattr(viewpoint_camera, "joint_pose_world_transform"):
++        means3D = geom_transform_points(base_means3D, viewpoint_camera.joint_pose_world_transform)
++
++    screenspace_points = torch.zeros_like(means3D, dtype=means3D.dtype, requires_grad=True, device="cuda") + 0
+@@
+-    means3D = pc.get_xyz
+     means2D = screenspace_points
+@@
+-            dir_pp = (pc.get_xyz - viewpoint_camera.camera_center.repeat(pc.get_features.shape[0], 1))
++            dir_pp = (means3D - viewpoint_camera.camera_center.repeat(pc.get_features.shape[0], 1))
+diff --git a/train.py b/train.py
+--- a/train.py
++++ b/train.py
+@@
+ try:
+     from diff_gaussian_rasterization import SparseGaussianAdam
+     SPARSE_ADAM_AVAILABLE = True
+ except:
+     SPARSE_ADAM_AVAILABLE = False
++
++def _skew(v):
++    zero = torch.zeros_like(v[..., 0])
++    return torch.stack(
++        [
++            torch.stack([zero, -v[..., 2], v[..., 1]], dim=-1),
++            torch.stack([v[..., 2], zero, -v[..., 0]], dim=-1),
++            torch.stack([-v[..., 1], v[..., 0], zero], dim=-1),
++        ],
++        dim=-2,
++    )
++
++def _axis_angle_to_matrix(axis_angle):
++    theta = torch.linalg.norm(axis_angle, dim=-1, keepdim=True).clamp_min(1e-8)
++    axis = axis_angle / theta
++    k = _skew(axis)
++    eye = torch.eye(3, dtype=axis_angle.dtype, device=axis_angle.device).expand(axis_angle.shape[:-1] + (3, 3))
++    sin = torch.sin(theta)[..., None]
++    cos = torch.cos(theta)[..., None]
++    return eye + sin * k + (1.0 - cos) * torch.matmul(k, k)
++
++class JointPoseAdapter(torch.nn.Module):
++    def __init__(self, train_cameras, lr_rot, lr_trans, max_rot, max_trans):
++        super().__init__()
++        self.rot = torch.nn.Parameter(torch.zeros(len(train_cameras), 3, device="cuda"))
++        self.trans = torch.nn.Parameter(torch.zeros(len(train_cameras), 3, device="cuda"))
++        self.max_rot = float(max_rot)
++        self.max_trans = float(max_trans)
++        self.lr_rot = float(lr_rot)
++        self.lr_trans = float(lr_trans)
++        for cam in train_cameras:
++            cam.base_world_view_transform = cam.world_view_transform.detach().clone()
++            cam.base_full_proj_transform = cam.full_proj_transform.detach().clone()
++            cam.base_camera_center = cam.camera_center.detach().clone()
++
++    def parameter_groups(self):
++        return [
++            {"params": [self.rot], "lr": self.lr_rot, "name": "joint_pose_rot"},
++            {"params": [self.trans], "lr": self.lr_trans, "name": "joint_pose_trans"},
++        ]
++
++    def regularization(self, index):
++        return (self.rot[index].square().mean() + self.trans[index].square().mean())
++
++    def apply(self, cam, index):
++        rotvec = self.rot[index].clamp(-self.max_rot, self.max_rot)
++        trans = self.trans[index].clamp(-self.max_trans, self.max_trans)
++        delta = torch.eye(4, dtype=cam.base_world_view_transform.dtype, device="cuda")
++        delta[:3, :3] = _axis_angle_to_matrix(rotvec)
++        delta[3, :3] = trans
++        cam.world_view_transform = cam.base_world_view_transform
++        cam.full_proj_transform = cam.base_full_proj_transform
++        cam.camera_center = cam.base_camera_center
++        cam.joint_pose_world_transform = cam.base_world_view_transform @ delta @ cam.base_world_view_transform.inverse()
++        return cam
+@@
+     gaussians.training_setup(opt)
+     if checkpoint:
+         (model_params, first_iter) = torch.load(checkpoint)
+         gaussians.restore(model_params, opt)
++
++    joint_pose = None
++    joint_pose_optimizer = None
++    if opt.joint_pose_opt:
++        joint_pose = JointPoseAdapter(
++            scene.getTrainCameras(),
++            lr_rot=opt.joint_pose_lr_rot,
++            lr_trans=opt.joint_pose_lr_trans,
++            max_rot=opt.joint_pose_max_rot,
++            max_trans=opt.joint_pose_max_trans,
++        )
++        joint_pose_optimizer = torch.optim.Adam(joint_pose.parameter_groups(), eps=1e-15)
+@@
+         viewpoint_cam = viewpoint_stack.pop(rand_idx)
+         vind = viewpoint_indices.pop(rand_idx)
++        pose_active = (
++            joint_pose is not None
++            and iteration >= opt.joint_pose_start_iter
++            and (opt.joint_pose_stop_iter <= 0 or iteration <= opt.joint_pose_stop_iter)
++        )
++        if pose_active:
++            viewpoint_cam = joint_pose.apply(viewpoint_cam, vind)
+@@
+         if opt.alpha_bg_weight > 0:
+             loss = loss + opt.alpha_bg_weight * background_loss
++        if pose_active and opt.joint_pose_reg_weight > 0:
++            loss = loss + opt.joint_pose_reg_weight * joint_pose.regularization(vind)
+@@
+                 else:
+                     gaussians.optimizer.step()
+                     gaussians.optimizer.zero_grad(set_to_none = True)
++                if joint_pose_optimizer is not None:
++                    joint_pose_optimizer.step()
++                    joint_pose_optimizer.zero_grad(set_to_none=True)
+@@
+             if (iteration in checkpoint_iterations):
+                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
++            if joint_pose is not None and (iteration in saving_iterations):
++                torch.save(
++                    {
++                        "rot": joint_pose.rot.detach().cpu(),
++                        "trans": joint_pose.trans.detach().cpu(),
++                        "train_camera_names": [cam.image_name for cam in scene.getTrainCameras()],
++                    },
++                    os.path.join(scene.model_path, f"joint_pose_adapter_{iteration}.pt"),
++                )

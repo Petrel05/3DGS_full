@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,7 +51,11 @@ def read_cameras(path: Path) -> dict[int, Camera]:
 
 def read_images(path: Path) -> list[ImagePose]:
     images: list[ImagePose] = []
-    for line in path.read_text().splitlines():
+    lines = path.read_text().splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
         if not line or line.startswith("#"):
             continue
         parts = line.split()
@@ -65,6 +70,10 @@ def read_images(path: Path) -> list[ImagePose]:
                 name=parts[9],
             )
         )
+        # COLMAP text images use two lines per image. The exported datasets in
+        # this project keep the POINTS2D line empty, but skip it when present.
+        if index < len(lines) and not lines[index].startswith("#"):
+            index += 1
     return images
 
 
@@ -130,12 +139,20 @@ def write_points_ply(path: Path, xyz: np.ndarray, rgb: np.ndarray) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True)
+    parser.add_argument("--output-dataset", type=Path, help="Write a filtered copy instead of modifying --dataset in place.")
     parser.add_argument("--alpha-threshold", type=int, default=32)
     parser.add_argument("--min-foreground-views", type=int, default=1)
     parser.add_argument("--min-foreground-ratio", type=float, default=0.08)
     args = parser.parse_args()
 
     dataset = Path(args.dataset)
+    if args.output_dataset is not None:
+        output_dataset = args.output_dataset
+        if output_dataset.exists():
+            raise FileExistsError(output_dataset)
+        shutil.copytree(dataset, output_dataset, copy_function=shutil.copy2)
+        dataset = output_dataset
+
     sparse = dataset / "sparse" / "0"
     cameras = read_cameras(sparse / "cameras.txt")
     images = read_images(sparse / "images.txt")

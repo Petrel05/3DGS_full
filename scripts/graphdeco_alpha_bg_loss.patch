@@ -27,4 +27,14 @@ diff --git a/train.py b/train.py
 +            ssim_value = ssim(image_for_loss, gt_image)
  
          loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_value)
-+        loss = loss + 0.2 * background_loss
++        if opt.alpha_bg_weight > 0:
++            loss = loss + opt.alpha_bg_weight * background_loss
+diff --git a/arguments/__init__.py b/arguments/__init__.py
+--- a/arguments/__init__.py
++++ b/arguments/__init__.py
+@@
+         self.depth_l1_weight_final = 0.01
+         self.random_background = False
++        self.alpha_bg_weight = 0.2
+         self.optimizer_type = "default"
+         super().__init__(parser, "Optimization Parameters")

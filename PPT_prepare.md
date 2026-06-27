@@ -21,6 +21,14 @@ Input images / scene frames
 | 数据2-人体 + BA | 16 | `outputs/official_data2_graphdeco_30k_masked_clean_bg_ba` | `outputs/official_data2_colmap_50k_masked_clean_ba` | 62,854 | 15M |
 | 数据3-场景 48帧 + BA | 48 | `outputs/official_scene48_graphdeco_30k_cropped_ba` | `outputs/official_scene48_colmap_50k_cropped_ba` | 919,502 | 218M |
 
+同帧数 no-BA/with-BA 对照也已经完成，BA 效果分析页应使用这三组，而不是只用 scene：
+
+| 数据 | no-BA Graphdeco 输出 | with-BA Graphdeco 输出 | no-BA 高斯数 | with-BA 高斯数 | BA sparse RMSE |
+| --- | --- | --- | ---: | ---: | --- |
+| 数据1-人体 16帧 | `outputs/official_data1_graphdeco_30k_masked_clean_bg` | `outputs/official_data1_graphdeco_30k_masked_clean_bg_ba` | 63,048 | 39,531 | 1.633 -> 1.266 px |
+| 数据2-人体 16帧 | `outputs/official_data2_graphdeco_30k_masked_clean_bg` | `outputs/official_data2_graphdeco_30k_masked_clean_bg_ba` | 63,339 | 62,854 | 1.821 -> 1.419 px |
+| 数据3-场景 48帧 | `outputs/official_scene48_graphdeco_30k_cropped_noba` | `outputs/official_scene48_graphdeco_30k_cropped_ba` | 939,023 | 919,502 | 3.215 -> 1.289 px |
+
 保留 `outputs/official_scene128_graphdeco_30k_cropped` 作为 128 帧 no-BA 高视角 baseline，不再把它描述为最新版主流程。
 
 ### 已做 PPT 页面需要替换的地方
@@ -34,17 +42,57 @@ Input images / scene frames
 - “最终结果总览”页：主表使用 data1/data2/scene48 的 BA 版结果；scene128 no-BA 只作为 baseline 或补充。
 - “Render/GT 对照”页：优先使用 `render_gt_data1_ba_4views.png`、`render_gt_data2_ba_4views.png`、`render_gt_scene48_ba_4views.png`。
 - “SIBR 展示”页：默认展示 `data1`、`data2`、`scene48` BA 版；`scene128` 标为 no-BA baseline。
-- “BA 对高斯泼溅效果分析”页：如果后续补 no-BA 48 帧 Graphdeco，则用 no-BA48 vs BA48 直接比较；否则用 BA 后 RMSE 和已有 lightweight gsplat 作为分析材料。
+- “BA 对高斯泼溅效果分析”页：使用 data1/data2/scene48 三组同帧数 no-BA vs BA 直接比较；lightweight gsplat 只作为 backup 或补充。
 
 ### 新增/更新 PPT 素材
 
 - `ppt_assets/render_gt_data1_ba_4views.png`
 - `ppt_assets/render_gt_data2_ba_4views.png`
 - `ppt_assets/render_gt_scene48_ba_4views.png`
+- `ppt_assets/render_gt_scene48_noba_4views.png`
+- `ppt_assets/ba_same_frame_graphdeco_comparison.png`
 - `ppt_assets/sibr_windows_transfer.md`
 - `official_data1_ba_sibr_package.tar.gz`
 - `official_data2_ba_sibr_package.tar.gz`
 - `official_scene48_ba_sibr_package.tar.gz`
+
+### BA 对高斯泼溅效果分析三页具体做法
+
+第 14 页：BA 是否改善几何
+
+- 标题：`Bundle Adjustment 降低相机几何误差`
+- 目的：先证明 BA 本身有效，避免直接跳到 3DGS 主观图。
+- 页面布局：左侧放一张三行表格，右侧放一句结论。
+- 表格列：`数据`、`视角数`、`BA 前 RMSE`、`BA 后 RMSE`、`下降幅度`。
+- 数值：
+  - 数据1：16 views，1.633 -> 1.266 px，下降约 22.5%
+  - 数据2：16 views，1.821 -> 1.419 px，下降约 22.0%
+  - scene48：48 views，3.215 -> 1.289 px，下降约 59.9%
+- 右侧结论写：`BA 直接优化的是 SIFT sparse tracks 的重投影误差；它为 3DGS 提供更一致的相机外参，而不是简单增加点数。`
+
+第 15 页：BA 是否影响 Graphdeco 3DGS
+
+- 标题：`同帧数 no-BA / with-BA 主训练对照`
+- 目的：回应“BA 是否对高斯泼溅有效”的评分点，强调这是官方 Graphdeco 30k 主训练结果。
+- 页面布局：左侧放 `ppt_assets/ba_same_frame_graphdeco_comparison.png`；右侧放小表格。
+- 小表格列：`数据`、`no-BA 高斯数`、`with-BA 高斯数`、`判断`。
+- 判断建议：
+  - data1：63k -> 40k，BA 后模型更紧凑，需要结合视觉看是否减少漂浮/冗余高斯。
+  - data2：63k -> 63k，模型规模基本持平，说明 BA 主要改变几何而不是点数。
+  - scene48：939k -> 920k，规模略降但同量级，说明 48 帧 BA 能保持完整场景表达。
+- 页脚结论：`高斯数是模型规模指标，不是质量指标；BA 的收益应看同视角 render/GT 和 SIBR 视角切换稳定性。`
+
+第 16 页：视觉对比与结论
+
+- 标题：`BA 对最终渲染的视觉影响`
+- 目的：把第 14 页的几何指标和第 15 页的模型规模转成最终效果判断。
+- 页面布局：三行，每行一个数据集；每行左侧 no-BA，右侧 with-BA。
+- 使用素材：
+  - data1：`ppt_assets/render_gt_data1_4views.png` vs `ppt_assets/render_gt_data1_ba_4views.png`
+  - data2：`ppt_assets/render_gt_data2_4views.png` vs `ppt_assets/render_gt_data2_ba_4views.png`
+  - scene48：`ppt_assets/render_gt_scene48_noba_4views.png` vs `ppt_assets/render_gt_scene48_ba_4views.png`
+- 每行只截取 1-2 个最能看出差异的视角，不要整张 contact sheet 全塞进去。
+- 右下角放最终结论：`BA 在三组数据上稳定降低重投影误差；进入 3DGS 后不表现为高斯数单调增加，而表现为更一致的相机几何和潜在更稳定的实时浏览效果。`
 
 建议做 20 页正文 + 3-5 页 backup。主线不要按代码文件讲，而是按评分点讲：VGGT 初始化 -> BA 编程实
   现 -> 3DGS 训练与实时展示 -> 改进与消融 -> 结论与未来工作。
@@ -136,30 +184,29 @@ Input images / scene frames
                                                                                run_sibr_viewer.py
                                                                                作用
   ─────  ─────────────────────  ────────────────────────────────────────────  ─────────────────────
-    14    BA 是否改善几何：重    单独回应 BA 分析                              柱状图：BA RMSE
-          投影误差分析                                                         before/after，数据1
-                                                                               2.374 -> 0.410，数
-                                                                               据2 3.087 ->
-                                                                               0.873，场景 2.269
-                                                                               -> 0.681
+    14    BA 是否改善几何：重    单独回应 BA 分析                              表格/柱状图：新版主
+          投影误差分析                                                         流程 BA sparse RMSE，
+                                                                               数据1 1.633 ->
+                                                                               1.266，数据2
+                                                                               1.821 -> 1.419，
+                                                                               scene48 3.215 ->
+                                                                               1.289
   ─────  ─────────────────────  ────────────────────────────────────────────  ─────────────────────
-    15    BA 是否改善高斯优      直接回答“BA 对高斯泼溅效果”                   折线/柱状图：
-          化：Gaussian loss                                                    Gaussian loss
-          分析                                                                 before/after，数据1
-                                                                               0.134112 ->
-                                                                               0.118603，数据2
-                                                                               0.132482 ->
-                                                                               0.115660，场景
-                                                                               0.342095 ->
-                                                                               0.278719
+    15    BA 是否改善高斯优      直接回答“BA 对高斯泼溅效果”                   图：
+          化：同帧数主训练对                                                    ba_same_frame_graphde
+          比                                                                   co_comparison.png；
+                                                                               表：data1/data2/
+                                                                               scene48 的 no-BA vs
+                                                                               BA 高斯数和输出目录
   ─────  ─────────────────────  ────────────────────────────────────────────  ─────────────────────
-    16    BA 效果的视觉对比与    把数字转成结论，避免只报指标                  建议补图：BA 前/后
-          结论                                                                 gsplat render 对
-                                                                               比；若没有图，放“误
-                                                                               差下降 + loss 下
-                                                                               降”双轴图，并说明最
-                                                                               终展示采用官方
-                                                                               Graphdeco
+    16    BA 效果的视觉对比与    把数字转成结论，避免只报指标                  图：data1/data2/
+          结论                                                                 scene48 同视角
+                                                                               no-BA render/GT vs
+                                                                               BA render/GT；结论：
+                                                                               BA 降低相机几何误差，
+                                                                               高斯数不一定增加，
+                                                                               质量看同视角渲染和
+                                                                               SIBR 稳定性
   ─────  ─────────────────────  ────────────────────────────────────────────  ─────────────────────
     17    VGGT 改进 1：          回应“VGGT 改进与消融”                         折线/柱状图：
           confidence                                                           percentile 0/25/50
@@ -210,15 +257,21 @@ Input images / scene frames
   - scene_frame_count_sweep.png：48 帧 vs 128 帧点数对比
   - human_mask_clean_bg_ablation.png：人体 mask/背景约束前后 render/GT 对比
   - final_human_render_gt_contact_sheets.png：data1/data2 最终 render/GT 对照
+  - ba_same_frame_graphdeco_comparison.png：data1/data2/scene48 同帧数 no-BA vs BA 主训练对比
+  - render_gt_scene48_noba_4views.png：scene48 no-BA render/GT 对照
   - sibr_windows_transfer.md：拷到 Windows 跑 SIBR 的目录清单和命令
 
-  我也补跑了 no-BA 对照：
+  主 BA 分析现在用 Graphdeco 30k 的同帧数 no-BA/with-BA 对照：
+  - outputs/official_data1_graphdeco_30k_masked_clean_bg vs outputs/official_data1_graphdeco_30k_masked_clean_bg_ba
+  - outputs/official_data2_graphdeco_30k_masked_clean_bg vs outputs/official_data2_graphdeco_30k_masked_clean_bg_ba
+  - outputs/official_scene48_graphdeco_30k_cropped_noba vs outputs/official_scene48_graphdeco_30k_cropped_ba
+
+  旧的 lightweight gsplat no-BA 对照保留为 backup：
   - outputs/verify_data1_no_ba_gsplat_allviews
   - outputs/verify_data2_no_ba_gsplat_allviews
   - outputs/verify_scene_no_ba_gsplat_12views
 
-  正式 scene 对比用 verify_scene_no_ba_gsplat_12views，它和已有 BA 验证同为 12 视角。另有一个
-  verify_scene_no_ba_gsplat_allviews 是第一次跑的 128 帧中间结果，PPT 图里没有用它。
+  verify_scene_no_ba_gsplat_12views 和 verify_scene_no_ba_gsplat_allviews 不再作为主 PPT 的 BA 结论依据，只在老师追问内部 gsplat 验证时使用。
 
   SIBR 前一步数据已经齐全，不需要再训练。Windows 端需要拷贝的核心目录也写进了 ppt_assets/
   sibr_windows_transfer.md:1。总体大小大概：data1 57M，data2 54M，scene 707M。

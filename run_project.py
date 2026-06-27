@@ -33,6 +33,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vggt-max-points", type=int, default=0, help="Maximum VGGT confidence-filtered points. 0 means all.")
     parser.add_argument("--vggt-confidence-percentile", type=float, default=0.0, help="Keep VGGT points above this confidence percentile. 0 means keep all finite points.")
     parser.add_argument("--vggt-model", default=".models/VGGT-1B", help="Local VGGT model directory or Hugging Face model id.")
+    parser.add_argument("--vggt-preprocess-mode", choices=["pad", "crop"], default="pad", help="VGGT image preprocessing mode passed to load_and_preprocess_images.")
+    parser.add_argument(
+        "--vggt-mask-background",
+        choices=["none", "black", "gray", "blur"],
+        default="none",
+        help="Replace mask-out background before VGGT inference. This is a test-time input optimization for masked subjects.",
+    )
+    parser.add_argument("--vggt-mask-erode", type=int, default=0, help="Erode the foreground mask before VGGT background replacement.")
     parser.add_argument("--allow-cpu-vggt", action="store_true", help="Force VGGT on CPU. Very slow for VGGT-1B.")
     parser.add_argument("--skip-vggt-sparse", action="store_true", help="Skip SIFT triangulation in VGGT mode and use dense VGGT points for viewer only.")
     parser.add_argument("--vggt-sparse-match-window", type=int, default=1, help="Adjacent image window for VGGT-initialized sparse tracks.")
@@ -123,6 +131,9 @@ def main() -> None:
                 max_features=args.max_features,
                 max_points=args.vggt_max_points,
                 confidence_percentile=args.vggt_confidence_percentile,
+                mode=args.vggt_preprocess_mode,
+                input_background_mode=args.vggt_mask_background,
+                input_mask_erode=args.vggt_mask_erode,
                 allow_cpu=args.allow_cpu_vggt,
                 skip_sparse=args.skip_vggt_sparse,
                 sparse_match_window=args.vggt_sparse_match_window,
@@ -293,6 +304,9 @@ def main() -> None:
             "cuda_memory_guard_fraction": float(args.cuda_memory_guard_fraction),
             "vggt_sparse_match_window": int(args.vggt_sparse_match_window),
             "vggt_sparse_loop_closure": bool(args.vggt_sparse_loop_closure),
+            "vggt_preprocess_mode": args.vggt_preprocess_mode,
+            "vggt_mask_background": args.vggt_mask_background,
+            "vggt_mask_erode": int(args.vggt_mask_erode),
             "dense_min_visible_views": int(args.dense_min_visible_views),
             "export_colmap_alpha_mask": bool(args.export_colmap_alpha_mask),
             "outlier_percentile": float(args.outlier_percentile),

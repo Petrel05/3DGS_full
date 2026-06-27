@@ -14,9 +14,35 @@ DATASETS = {
         "model": ROOT / "outputs" / "official_data1_graphdeco_30k_masked_clean_bg_ba",
         "source": ROOT / "outputs" / "official_data1_colmap_50k_masked_clean_ba",
     },
+    "data1_pruned": {
+        "model": ROOT / "outputs" / "official_data1_graphdeco_30k_masked_clean_bg_ba_pruned",
+        "source": ROOT / "outputs" / "official_data1_colmap_50k_masked_clean_ba",
+    },
+    "data1_p0_strict": {
+        "model": ROOT / "outputs" / "official_data1_graphdeco_30k_p0_masked_strict_bg_ba_fgstrict_pruned",
+        "source": ROOT / "outputs" / "official_data1_colmap_50k_p0_masked_strict_ba_fgstrict",
+    },
     "data2": {
         "model": ROOT / "outputs" / "official_data2_graphdeco_30k_masked_clean_bg_ba",
         "source": ROOT / "outputs" / "official_data2_colmap_50k_masked_clean_ba",
+    },
+    "data2_pruned": {
+        "model": ROOT / "outputs" / "official_data2_graphdeco_30k_masked_clean_bg_ba_pruned",
+        "source": ROOT / "outputs" / "official_data2_colmap_50k_masked_clean_ba",
+    },
+    "data2_p0_strict": {
+        "model": ROOT / "outputs" / "official_data2_graphdeco_30k_p0_masked_strict_bg_ba_fgstrict_pruned",
+        "source": ROOT / "outputs" / "official_data2_colmap_50k_p0_masked_strict_ba_fgstrict",
+    },
+    "data2_vggt_crop_best": {
+        "model": ROOT
+        / "outputs"
+        / "vggt_data2_network_experiments"
+        / "foreground_crop_p0_graphdeco_30k_strict_pruned",
+        "source": ROOT
+        / "outputs"
+        / "vggt_data2_network_experiments"
+        / "foreground_crop_p0_colmap_masked_strict_fg",
     },
     "scene48": {
         "model": ROOT / "outputs" / "official_scene48_graphdeco_30k_cropped_ba",

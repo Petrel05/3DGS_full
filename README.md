@@ -18,9 +18,27 @@
 | 数据3-场景 48帧 + BA | `outputs/official_scene48_graphdeco_30k_cropped_ba` | `outputs/official_scene48_colmap_50k_cropped_ba` | 919,502 | 新版 BA 主流程，已完成 |
 | 数据3-场景 128帧 no-BA | `outputs/official_scene128_graphdeco_30k_cropped` | `outputs/official_scene128_colmap_50k_cropped` | 988,158 | 高视角 baseline |
 
+BA 效果分析使用同数据、同帧数、同 Graphdeco 30k 设置的 no-BA/with-BA 对照，而不是把不同帧数结果直接混在一起比较：
+
+| 数据 | no-BA 输出 | with-BA 输出 | no-BA 高斯数 | with-BA 高斯数 | BA sparse RMSE |
+| --- | --- | --- | ---: | ---: | --- |
+| 数据1-人体 16帧 | `outputs/official_data1_graphdeco_30k_masked_clean_bg` | `outputs/official_data1_graphdeco_30k_masked_clean_bg_ba` | 63,048 | 39,531 | 1.633 -> 1.266 px |
+| 数据2-人体 16帧 | `outputs/official_data2_graphdeco_30k_masked_clean_bg` | `outputs/official_data2_graphdeco_30k_masked_clean_bg_ba` | 63,339 | 62,854 | 1.821 -> 1.419 px |
+| 数据3-场景 48帧 | `outputs/official_scene48_graphdeco_30k_cropped_noba` | `outputs/official_scene48_graphdeco_30k_cropped_ba` | 939,023 | 919,502 | 3.215 -> 1.289 px |
+
+这些结果说明 BA 的直接作用是降低 SIFT sparse tracks 的重投影误差，并把优化后的相机几何交给 3DGS。最终高斯数量不一定增加，因此 BA 对 3DGS 的影响应结合 render/GT、SIBR 同视角截图和模型稳定性一起判断。
+
 最终质量判断以官方 Graphdeco 训练输出、官方 `render.py`、以及 SIBR viewer 视频为准。项目内 WebGL viewer 只用于快速检查点云分布，它不等价于官方 SIBR viewer 的 SH 渲染。
 
 补充的 VGGT confidence filtering、视频帧数选择、no-BA/with-BA 对比、BA+gsplat 轻量验证和输入预处理消融实验见 `REPORT.md`。
+近期新增的 VGGT 相关研究性实验包括：data2 输入/输出侧优化、8/4/4 held-out geometry adapter、data1 微调迁移到 data2、以及 VGGT/3DGS joint pose adapter。总体结论是：前景感知输入能显著降低 VGGT sparse geometry RMSE；但 geometry adapter、data1 小样本微调和 3DGS photometric joint pose adapter 在 held-out test render 上均未超过 frozen VGGT baseline，说明小数据下 VGGT 几何优化容易与最终 3DGS 泛化目标不一致。
+
+| 实验 | 主要结果 | 报告 |
+| --- | --- | --- |
+| data2 VGGT 输入/输出优化 | 背景置灰和前景 crop 将 BA RMSE 从 1.419 px 降到 0.865 / 0.805 px，但训练视角 render PSNR 未同步提升 | `outputs/vggt_data2_network_experiments/vggt_data2_experiment_report.md` |
+| data2 8/4/4 geometry adapter | adapter 将 train-pool RMSE 降到 1.249 px，但 held-out PSNR 从 27.218 dB 降到 26.315 dB | `outputs/vggt_adapter_split_data2/summary.md` |
+| data1 微调 VGGT camera-head adapter 后迁移 data2 | data1 loss 下降，但 data2 BA RMSE 从 1.602 px 变差到 2.572-3.144 px | `outputs/vggt_data1_finetune_transfer_summary.md` |
+| data2 8/4/4 joint 3DGS pose adapter | joint pose delta 被优化，但 held-out PSNR 只有 25.122 dB，低于 frozen baseline | `outputs/vggt_adapter_split_data2/joint_844_report.md` |
 
 最终 Graphdeco 输出、COLMAP 输入、WebGL 预览和 render/GT 拼图不随 Git 提交。读者可按“复现最终方法”中的命令，从原始数据和 VGGT 权重重新生成这些 `outputs/official_*` 目录。SIBR viewer 运行时只需要对应的 Graphdeco 模型目录和 COLMAP 输入目录。
 
@@ -214,9 +232,49 @@ python scripts/run_sibr_viewer.py scene48 --dry-run
 - `scripts/crop_colmap_letterbox.py`：裁掉 VGGT padding 产生的上下 letterbox，并同步修正 COLMAP 相机内参。
 - `scripts/filter_colmap_points_by_alpha.py`：按 alpha 投影过滤 COLMAP 初始化点云的辅助工具。
 - `scripts/graphdeco_alpha_bg_loss.patch`：官方 Graphdeco `train.py` 的 alpha 背景损失补丁。
+- `scripts/graphdeco_prefer_testtxt_eval_split.patch`：让 Graphdeco eval 优先读取 `sparse/0/test.txt`，用于固定 8/4/4 held-out test views。
+- `scripts/graphdeco_joint_pose_adapter.patch`：在官方 Graphdeco 训练中加入 joint pose adapter，用 3DGS photometric loss 优化 VGGT 输出相机的 per-view pose delta。
 - `scripts/convert_official_3dgs_to_viewer.py`：把官方 3DGS PLY 转成项目 WebGL 预览。
 - `scripts/make_render_contact_sheet.py`：生成官方 render/GT 对照拼图。
 - `scripts/run_sibr_viewer.py`：SIBR viewer 参数化启动脚本，解决跨机器路径不一致问题。
+- `scripts/run_vggt_data2_experiments.py`：data2 VGGT 侧输入/输出优化实验。
+- `scripts/run_vggt_adapter_split_experiment.py`：data2 8/4/4 frozen VGGT + geometry adapter held-out 实验。
+- `scripts/run_vggt_data1_finetune_data2_transfer.py`：data1 微调 VGGT camera-head adapter 后迁移到 data2 的小样本验证。
+- `scripts/build_vggt_joint_844_report.py`：汇总 frozen baseline、geometry adapter 和 joint 3DGS pose adapter 的 8/4/4 对照。
+
+## VGGT 相关实验复现
+
+这些实验不作为最终主流程替代，而是用于分析“如何改进 VGGT 初始化”和“几何优化能否提升 3DGS 泛化”。
+
+```bash
+# data2 VGGT 输入/输出侧优化
+conda run -n vggt python scripts/run_vggt_data2_experiments.py
+conda run -n vggt python scripts/build_vggt_experiment_report.py
+
+# data2 8/4/4 geometry adapter held-out 对照
+conda run -n vggt python scripts/run_vggt_adapter_split_experiment.py --iterations 7000
+conda run -n vggt python scripts/plot_vggt_adapter_split_assets.py
+
+# data1 微调 VGGT camera-head adapter，再迁移到 data2
+conda run -n vggt python scripts/run_vggt_data1_finetune_data2_transfer.py \
+  --output outputs/vggt_data1_finetune_data2_transfer_conservative \
+  --steps 30 \
+  --lr 1e-5 \
+  --anchor-weight 0.2 \
+  --ba-backend legacy \
+  --run-graphdeco
+
+# data2 8/4/4 joint 3DGS pose adapter 汇总
+conda run -n vggt python scripts/build_vggt_joint_844_report.py
+```
+
+`run_vggt_adapter_split_experiment.py` 和 joint 实验依赖 Graphdeco 能按 `sparse/0/test.txt` 固定 test views。若使用干净的官方 Graphdeco checkout，需要先应用：
+
+```bash
+patch -d /tmp/gaussian-splatting-official -p1 < scripts/graphdeco_prefer_testtxt_eval_split.patch
+patch -d /tmp/gaussian-splatting-official -p1 < scripts/graphdeco_alpha_bg_loss.patch
+patch -d /tmp/gaussian-splatting-official -p1 < scripts/graphdeco_joint_pose_adapter.patch
+```
 
 ## 已知限制
 
@@ -224,3 +282,4 @@ python scripts/run_sibr_viewer.py scene48 --dry-run
 - SIBR 启动脚本只做路径规整和命令封装，不修改官方 viewer 主逻辑。
 - 人体数据存在姿态变化和遮挡，不是严格静态物体，静态 3DGS 会受到一定影响。
 - WebGL 预览为近似检查工具，不能完全复现官方 SIBR viewer 的 SH 渲染。
+- 小样本 VGGT adapter/微调实验目前没有带来 held-out render 提升，更多体现为负结果：几何或训练视角 photometric loss 下降不必然转化为 3DGS 新视角泛化提升。

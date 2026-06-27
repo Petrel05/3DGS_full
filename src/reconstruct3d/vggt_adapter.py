@@ -22,6 +22,37 @@ class VGGTOutput:
     frames: list[Frame]
 
 
+def _mask_foreground(mask: np.ndarray | None, image_shape: tuple[int, int, int], erode: int) -> np.ndarray:
+    height, width = image_shape[:2]
+    if mask is None:
+        foreground = np.ones((height, width), dtype=np.uint8) * 255
+    else:
+        foreground = (mask > 10).astype(np.uint8) * 255
+    if erode > 0:
+        size = erode * 2 + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
+        foreground = cv2.erode(foreground, kernel, iterations=1)
+    return foreground > 10
+
+
+def _optimize_vggt_input_frame(frame: Frame, background_mode: str, mask_erode: int) -> Frame:
+    if background_mode == "none" or frame.mask is None:
+        return frame
+    foreground = _mask_foreground(frame.mask, frame.image.shape, mask_erode)
+    image = frame.image.copy()
+    if background_mode == "black":
+        replacement = np.zeros_like(image)
+    elif background_mode == "gray":
+        replacement = np.full_like(image, 127)
+    elif background_mode == "blur":
+        ksize = max(15, (min(image.shape[:2]) // 12) | 1)
+        replacement = cv2.GaussianBlur(image, (ksize, ksize), 0)
+    else:
+        raise ValueError(f"Unsupported VGGT background mode: {background_mode}")
+    image[~foreground] = replacement[~foreground]
+    return Frame(name=frame.name, image=image, mask=frame.mask, scale=frame.scale)
+
+
 def _write_vggt_inputs(frames: list[Frame], output_dir: Path) -> list[Path]:
     input_dir = ensure_dir(output_dir / "vggt_inputs")
     paths = []
@@ -211,6 +242,8 @@ def run_vggt(
     max_points: int = 0,
     confidence_percentile: float = 0.0,
     mode: str = "pad",
+    input_background_mode: str = "none",
+    input_mask_erode: int = 0,
     allow_cpu: bool = False,
     skip_sparse: bool = False,
     sparse_match_window: int = 1,
@@ -223,6 +256,7 @@ def run_vggt(
 
     output_dir = ensure_dir(output_dir)
     frames = load_image_sequence(source, max_images=max_images, max_size=max_size, use_masks=True)
+    frames = [_optimize_vggt_input_frame(frame, input_background_mode, input_mask_erode) for frame in frames]
     image_paths = _write_vggt_inputs(frames, output_dir)
 
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
